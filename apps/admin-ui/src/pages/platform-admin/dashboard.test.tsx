@@ -1,5 +1,7 @@
+import React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  act,
   render,
   screen,
   waitFor,
@@ -104,6 +106,56 @@ describe("PlatformAdminDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText(/Signed in as Ops/)).toBeTruthy();
     });
+  });
+
+  it("ignores a stale session response after the effect is cleaned up", async () => {
+    let resolveFirstSession!: (value: unknown) => void;
+    let resolveSecondSession!: (value: unknown) => void;
+    const firstSession = new Promise((resolve) => {
+      resolveFirstSession = resolve;
+    });
+    const secondSession = new Promise((resolve) => {
+      resolveSecondSession = resolve;
+    });
+    let sessionRequest = 0;
+    mockFetchWithAuth.mockImplementation((url: string) => {
+      if (url.endsWith("/session")) {
+        sessionRequest += 1;
+        return sessionRequest === 1 ? firstSession : secondSession;
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    render(
+      <React.StrictMode>
+        <PlatformAdminDashboard />
+      </React.StrictMode>,
+    );
+
+    await act(async () => {
+      resolveSecondSession({
+        data: {
+          userId: "pa-new",
+          displayName: "Current Admin",
+          email: "current@openwind.io",
+        },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/Signed in as Current Admin/)).toBeTruthy();
+
+    await act(async () => {
+      resolveFirstSession({
+        data: {
+          userId: "pa-old",
+          displayName: "Stale Admin",
+          email: "stale@openwind.io",
+        },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.queryByText(/Signed in as Stale Admin/)).toBeNull();
+    expect(screen.getByText(/Signed in as Current Admin/)).toBeTruthy();
   });
 
   it("fetches the sandbox list, never an all-tenants list", async () => {
