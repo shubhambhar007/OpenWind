@@ -47,15 +47,23 @@ export function PlatformAdminDashboard(): React.ReactElement {
   }, []);
 
   React.useEffect(() => {
+    let cancelled = false;
+
     fetchWithAuth(`${API_URL}/platform-admin/session`)
       .then((res) => {
-        setSession((res as { data: PlatformAdminSession }).data);
+        if (!cancelled) {
+          setSession((res as { data: PlatformAdminSession }).data);
+        }
       })
       .catch(() => {
         // Non-fatal -- the dashboard is still usable without the identity banner;
         // RequirePlatformAdminMfa already confirmed the session is valid to get here.
       });
     refresh();
+
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   async function handleLogout(): Promise<void> {
